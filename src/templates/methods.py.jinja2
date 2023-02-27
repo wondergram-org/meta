@@ -1,0 +1,52 @@
+from typing import *
+
+from pydantic import parse_obj_as
+
+from .objects import *
+
+if TYPE_CHECKING:
+    from wonda.api import ABCAPI, API
+    from wonda.api import File as InputFile
+
+
+
+class APIMethods:
+    def __init__(self, api: Union["ABCAPI", "API"]) -> None:
+        self.api = api
+
+    @staticmethod
+    def get_params(loc: dict) -> dict:
+        n = {
+            k: v
+            for k, v in loc.items()
+            if k not in ("self", "kwargs") and v is not None
+        }
+        n.update(loc["kwargs"])
+        return n
+
+    {% for method in schema.content.methods %}
+    {% set return_type = method.return_type.to_pythonic_value(enable_quotation=False) %}
+    async def {{ method.name | decamelize }}(
+        self,
+    {%- for argument in method.sorted_args() %}
+        {{ argument.render() }},
+    {%- endfor %}
+        **kwargs
+    ) -> {{ return_type }}:
+        """
+        {{ method.description | unmarkdown | wrapped(line_break="\n\t") }}
+        """
+        response = await self.api.request("{{ method.name }}", self.get_params(locals()))
+        {%- if method.return_type.type.value in ["any_of", "array"] %}
+        return parse_obj_as({{ return_type }}, response)
+        {%- elif method.return_type.type.value == "reference" %}
+        {%- set reference = schema.get_ref(method.return_type.reference) %}
+        {%- if reference.type.value == "any_of" %}
+        return parse_obj_as({{ method.return_type.reference }}, response)
+        {%- else %}
+        return {{ method.return_type.reference }}(**response)
+        {%- endif %}
+        {%- else %}
+        return response
+        {%- endif %}
+    {% endfor %}

@@ -1,0 +1,12 @@
+from enum import Enum
+
+{% for obj in schema.content.objects %}
+{% for prop in obj.properties %}
+{% if prop.enumeration %}
+class {{ obj.name + prop.name | pascalize }}(Enum):
+    {%- for var in prop.enumeration %}
+    {{ var.upper().replace("/", "_") }} = "{{ var }}"
+    {%- endfor %}
+{% endif %}
+{% endfor %}
+{% endfor %}

@@ -1,0 +1,47 @@
+import inspect
+from typing import List, Literal, Optional, Union
+
+from pydantic import BaseModel, Field
+from typing_extensions import Annotated
+
+from .enums import *
+
+
+{% for obj in schema.content.objects %}
+{% if obj.type.value != "any_of" %}
+class {{ obj.name | pascalize }}(BaseModel):
+    """
+    {{ obj.description | unmarkdown | wrapped }}
+    """
+    {%- if obj.properties %}
+    {% for prop in obj.properties -%}
+    {{ prop.render(obj.name) }}
+    {% endfor %}
+    {% else %}
+    pass
+    {% endif %}
+{% endif %}
+{% endfor %}
+
+{% for obj in schema.content.objects %}
+{% if obj.type.value == "any_of" %}
+{{ obj.name | pascalize }} = Annotated[
+    Union[
+        {% for a in obj.any_of %}
+        {{ a.to_pythonic_value(enable_quotation=False) }},
+        {% endfor %}
+    ],
+    Field(discriminator={{ schema.get_discriminator(obj.name) }}),
+]
+{% endif %}
+{% endfor %}
+
+for v in locals().copy().values():
+    if inspect.isclass(v) and issubclass(v, BaseModel):
+        v.update_forward_refs()
+
+__all__ = (
+    {% for obj in schema.content.objects %}
+    "{{ obj.name }}",
+    {% endfor %}
+)
